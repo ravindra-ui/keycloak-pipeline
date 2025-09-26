@@ -1,0 +1,53 @@
+services:
+  keycloak_pg:
+    image: postgres:16
+    container_name: keycloak_pg
+    restart: unless-stopped
+    env_file:
+      - postgres.env
+    volumes:
+      - ./data:/var/lib/postgresql/data
+    ports:
+      - "5440:5432"
+    networks:
+      - keycloak_internal
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.5
+    container_name: keycloak
+    restart: unless-stopped
+    depends_on:
+      - keycloak_pg
+    env_file:
+      - keycloak.env
+    volumes:
+      - ./conf:/opt/keycloak/conf:ro
+        #      - ./data_new:/var/lib/postgresql/data
+      # NOTE: no themes mount (uses built-ins)
+    command:
+      - start
+      - --http-enabled=true
+      - --proxy-headers=xforwarded
+      - --hostname=sso.dev.cloudgw.infernet.in
+      - --hostname-strict=false
+      - --spi-theme-welcome-theme=keycloak
+    ports:
+      - "127.0.0.1:8081:8080"
+    networks:
+      keycloak_internal: {}
+      nginx:
+        aliases:
+          - keycloak
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/realms/master/.well-known/openid-configuration >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+networks:
+  keycloak_internal:
+    driver: bridge
+  nginx:
+    external: true
+
